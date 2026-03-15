@@ -6,12 +6,13 @@ Reproducible Python benchmark framework for sandbox providers used for code exec
 
 - Python 3.11
 - Docker CLI available on `PATH` (for `docker` provider)
+- Daytona API credentials (for `daytona` provider)
 
 ## Implemented Providers
 
 - `docker`: baseline implementation using Docker CLI (`docker run`, `docker exec`, `docker cp`, `docker rm -f`)
 - `e2b`: placeholder stub
-- `daytona`: placeholder stub
+- `daytona`: AsyncDaytona-based implementation (`create`, `exec`, `stream_exec`, file read/write, `destroy`)
 
 ## Benchmarks
 
@@ -28,6 +29,20 @@ The runner executes the full suite:
 
 ```bash
 python3.11 runner/run_benchmark.py --provider docker --runs 30
+```
+
+If dependencies are managed with `uv`, run through the project environment:
+
+```bash
+uv run python runner/run_benchmark.py --provider docker --runs 30
+```
+
+For Daytona:
+
+```bash
+export DAYTONA_API_KEY=...
+# optional: DAYTONA_API_URL, DAYTONA_TARGET
+uv run python runner/run_benchmark.py --provider daytona --runs 5
 ```
 
 Raw and summary output files are written as:
