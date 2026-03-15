@@ -1,28 +1,47 @@
-"""Streaming output benchmark scaffold."""
+"""Streaming time-to-first-output benchmark."""
 
-from core.metrics import BenchmarkReport, MetricSample
-from core.scenario import BenchmarkScenario
-from core.timer import timer
+from __future__ import annotations
+
+from typing import Any, TypedDict
+
+from core.timer import elapsed, now
+from providers.base import SandboxProvider
 
 
-def build_scenario() -> BenchmarkScenario:
-    def run(provider) -> BenchmarkReport:
-        with timer() as elapsed:
-            chunks = list(provider.stream("echo benchmark"))
-        return BenchmarkReport(
-            benchmark="stream",
-            provider=provider.name,
-            samples=[
-                MetricSample(
-                    name="stream",
-                    value=elapsed(),
-                    metadata={"chunks": len(chunks)},
-                )
-            ],
-        )
+class BenchmarkResult(TypedDict):
+    latency: float
+    metadata: dict[str, Any]
 
-    return BenchmarkScenario(
-        name="stream",
-        description="Measure time to collect streamed command output.",
-        run=run,
-    )
+
+class Benchmark:
+    name = "stream"
+
+    async def run(self, provider: SandboxProvider) -> BenchmarkResult:
+        sandbox = await provider.create()
+        try:
+            command = 'python -c "print(\'start\'); import time; time.sleep(1); print(\'end\')"'
+            t1 = now()
+            stream = sandbox.stream_exec(command)
+            first_output_latency: float | None = None
+            chunk_count = 0
+            chunks: list[str] = []
+
+            async for chunk in stream:
+                chunk_count += 1
+                chunks.append(chunk)
+                if first_output_latency is None:
+                    first_output_latency = elapsed(t1)
+
+            if first_output_latency is None:
+                first_output_latency = elapsed(t1)
+        finally:
+            await sandbox.destroy()
+
+        return {
+            "latency": first_output_latency,
+            "metadata": {
+                "time_to_first_output": first_output_latency,
+                "chunks": chunk_count,
+                "output_preview": "".join(chunks).strip()[:120],
+            },
+        }

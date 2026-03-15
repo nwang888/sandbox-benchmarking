@@ -1,27 +1,54 @@
-# Sandbox Benchmarking
+# sandbox-bench
 
-Scaffold for benchmarking sandbox providers such as local Docker, E2B, and Daytona.
+Reproducible Python benchmark framework for sandbox providers used for code execution.
 
-## Layout
+## Requirements
 
-```text
-providers/
-benchmarks/
-core/
-runner/
-results/
-scripts/
-```
+- Python 3.11
+- Docker CLI available on `PATH` (for `docker` provider)
 
-## Run
+## Implemented Providers
+
+- `docker`: baseline implementation using Docker CLI (`docker run`, `docker exec`, `docker cp`, `docker rm -f`)
+- `e2b`: placeholder stub
+- `daytona`: placeholder stub
+
+## Benchmarks
+
+The runner executes the full suite:
+
+- `cold_start`
+- `exec`
+- `stream`
+- `filesystem`
+- `command_loop`
+- `destroy`
+
+## Run Benchmarks
 
 ```bash
-python -m runner.run_benchmark docker_local cold_start
-python scripts/plot_results.py
+python3.11 runner/run_benchmark.py --provider docker --runs 30
 ```
 
-## Notes
+Raw and summary output files are written as:
 
-- The provider modules are scaffolds. Each provider still needs concrete implementations for `start`, `exec`, `stream`, filesystem access, and `destroy`.
-- Raw benchmark JSON is written to `results/raw/`.
-- Summaries or charts can be written to `results/summaries/`.
+- `results/raw/{provider}_{benchmark}.json`
+- `results/summaries/{provider}_{benchmark}.json`
+
+## Inspect Results
+
+```bash
+python3.11 scripts/summarize_results.py
+python3.11 scripts/plot_results.py
+```
+
+## Reproducibility Metadata
+
+Each benchmark result captures:
+
+- timestamp
+- Python version
+- machine type
+- region (from env if available, otherwise `unknown`)
+- provider version
+- number of runs

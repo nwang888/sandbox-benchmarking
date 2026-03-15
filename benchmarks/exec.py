@@ -1,27 +1,31 @@
-"""Command execution benchmark scaffold."""
+"""Command execution latency benchmark."""
 
-from core.metrics import BenchmarkReport, MetricSample
-from core.scenario import BenchmarkScenario
-from core.timer import time_call
+from __future__ import annotations
+
+from typing import Any, TypedDict
+
+from core.timer import elapsed, now
+from providers.base import SandboxProvider
 
 
-def build_scenario() -> BenchmarkScenario:
-    def run(provider) -> BenchmarkReport:
-        duration, output = time_call(provider.exec, "echo benchmark")
-        return BenchmarkReport(
-            benchmark="exec",
-            provider=provider.name,
-            samples=[
-                MetricSample(
-                    name="exec",
-                    value=duration,
-                    metadata={"output_preview": str(output)[:80]},
-                )
-            ],
-        )
+class BenchmarkResult(TypedDict):
+    latency: float
+    metadata: dict[str, Any]
 
-    return BenchmarkScenario(
-        name="exec",
-        description="Measure single-command execution latency.",
-        run=run,
-    )
+
+class Benchmark:
+    name = "exec"
+
+    async def run(self, provider: SandboxProvider) -> BenchmarkResult:
+        sandbox = await provider.create()
+        try:
+            start = now()
+            output = await sandbox.exec('python -c "print(1)"')
+            latency = elapsed(start)
+        finally:
+            await sandbox.destroy()
+
+        return {
+            "latency": latency,
+            "metadata": {"output_preview": output.strip()[:80]},
+        }

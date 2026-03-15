@@ -1,5 +1,7 @@
 # ARCHITECTURE.md
 
+This document is the source of truth for repository structure and implementation.
+
 ## Project: sandbox-bench
 
 ### Goal
@@ -15,6 +17,123 @@ The system should be provider-agnostic so new sandbox backends can be
 added easily.
 
 ------------------------------------------------------------------------
+
+# Implementation Contract
+
+The implementation must strictly follow the interfaces and patterns defined below.
+
+Do not invent alternative abstractions unless necessary.
+
+## Provider Interface Contract
+
+All sandbox providers must implement the interface defined in:
+
+providers/base.py
+
+Two classes must exist:
+
+SandboxProvider
+Sandbox
+
+SandboxProvider responsibilities:
+- create sandbox instances
+
+Sandbox responsibilities:
+- execute commands
+- stream stdout
+- read/write files
+- destroy sandbox
+
+Benchmarks must interact only with the Sandbox abstraction.
+
+Benchmarks must never directly reference provider SDKs.
+
+---
+
+## Benchmark Interface Contract
+
+Every benchmark module must expose:
+
+class BenchmarkResult(TypedDict):
+    latency: float
+    metadata: dict[str, Any]
+
+class Benchmark:
+    name: str
+
+    async def run(self, provider: SandboxProvider) -> BenchmarkResult:
+        ...
+
+latency is the primary metric used in raw runs
+metadata holds benchmark-specific values
+
+The run() method must return a BenchmarkResult; latency is in seconds.
+
+Benchmarks must not contain provider-specific logic.
+
+---
+
+## Provider Loading
+
+The benchmark runner must load providers from providers/registry.py.
+Do not dynamically import providers by filename in the runner.
+
+Example CLI:
+
+python runner/run_benchmark.py --provider docker
+
+---
+
+## Docker Implementation
+
+Docker provider implementation:
+
+Use the Docker CLI via subprocess.
+
+Required commands:
+
+docker run
+docker exec
+docker cp
+docker rm -f
+
+Do not require the docker Python SDK.
+
+## Benchmark Discovery
+
+Benchmarks should be discovered by importing modules inside the benchmarks directory.
+
+The runner should execute the following benchmarks:
+
+cold_start
+exec
+stream
+filesystem
+command_loop
+destroy
+
+---
+
+## Result Storage Contract
+
+Raw results must be written to:
+
+results/raw/
+
+Summary statistics must be written to:
+
+results/summaries/
+
+File naming format:
+
+{provider}_{benchmark}.json
+
+Example:
+
+docker_exec.json
+e2b_cold_start.json
+
+---------------------------------------------------------------------
 
 # High-Level Design
 
@@ -32,7 +151,7 @@ Benchmarks interact only with a standardized provider interface.
 
 sandbox-bench/
 
-providers/ **init**.py base.py docker_local.py e2b.py daytona.py
+providers/ **init**.py base.py registry.py docker_local.py e2b.py daytona.py
 
 benchmarks/ **init**.py cold_start.py exec.py stream.py filesystem.py
 command_loop.py destroy.py
@@ -45,7 +164,28 @@ results/ raw/ summaries/
 
 scripts/ summarize_results.py plot_results.py
 
-requirements.txt README.md ARCHITECTURE.md
+README.md ARCHITECTURE.md pyproject.toml
+
+------------------------------------------------------------------------
+
+## Repository Structure Rules
+
+The directories listed below must exist and contain the described modules.
+
+Additional files already present in the repository may remain (for example:
+pyproject.toml, ARCHITECTURE.md, scripts/, or other utility modules).
+
+Do not remove existing files unless they conflict with the architecture.
+
+Required directories:
+
+providers/
+benchmarks/
+core/
+runner/
+results/
+
+These directories must contain the modules described in this document.
 
 ------------------------------------------------------------------------
 
@@ -68,22 +208,27 @@ class SandboxProvider: async def create(self) -\> "Sandbox": ...
 
 Represents a running sandbox instance.
 
+from collections.abc import AsyncIterator
+
 class Sandbox:
-
     async def exec(self, cmd: str) -> str:
-        '''Execute command and return stdout'''
+        """Execute a command and return complete stdout."""
 
-    async def stream_exec(self, cmd: str):
-        '''Execute command and stream output'''
+    async def stream_exec(self, cmd: str) -> AsyncIterator[str]:
+        """Execute a command and yield stdout chunks as they arrive. Streaming latency is measured as:
+        T1 = immediately before calling stream_exec(...)
+        T2 = when the first stdout chunk is yielded
+        time_to_first_output = T2 - T1"""
 
-    async def write_file(self, path: str, content: str):
-        '''Write file inside sandbox'''
+    async def write_file(self, path: str, content: str) -> None:
+        """Write a file inside the sandbox."""
 
     async def read_file(self, path: str) -> str:
-        '''Read file from sandbox'''
+        """Read a file inside the sandbox."""
 
-    async def destroy(self):
-        '''Destroy sandbox'''
+    async def destroy(self) -> None:
+        """Destroy the sandbox."""
+
 
 ------------------------------------------------------------------------
 
@@ -195,18 +340,20 @@ File: benchmarks/destroy.py
 
 runner/run_benchmark.py
 
-Responsibilities:
+CLI behavior:
 
--   load provider
--   load benchmark scenarios
--   run benchmarks N times
--   record raw results
--   compute summary metrics
--   print results to console
+python runner/run_benchmark.py --provider docker --runs 30
 
-Example usage:
+This command runs all registered benchmarks for the selected provider.
 
-python runner/run_benchmark.py --provider e2b --runs 30
+Behavior:
+
+1. Load the specified provider.
+2. Discover all benchmarks in the benchmarks/ directory.
+3. Execute each benchmark sequentially.
+4. Run each benchmark N times.
+5. Write raw results.
+6. Compute summary statistics.
 
 ------------------------------------------------------------------------
 
@@ -236,9 +383,14 @@ Compute:
 
 Raw results: results/raw/
 
+File names:
+Raw results: results/raw/{provider}_{benchmark}.json
+Summary results: results/summaries/{provider}_{benchmark}.json
+
 Example file:
 
 { "provider": "e2b", "benchmark": "exec", "runs": \[0.82, 0.91, 0.79\] }
+
 
 Summary results: results/summaries/
 
@@ -251,6 +403,12 @@ Docker (baseline) providers/docker_local.py
 E2B providers/e2b.py
 
 Daytona providers/daytona.py
+
+------------------------------------------------------------------------
+
+Providers must be registered in providers/registry.py.
+
+The benchmark runner must load providers from this registry rather than dynamically importing modules.
 
 ------------------------------------------------------------------------
 

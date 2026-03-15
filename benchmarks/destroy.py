@@ -1,21 +1,24 @@
-"""Teardown benchmark scaffold."""
+"""Sandbox destroy latency benchmark."""
 
-from core.metrics import BenchmarkReport, MetricSample
-from core.scenario import BenchmarkScenario
-from core.timer import time_call
+from __future__ import annotations
+
+from typing import Any, TypedDict
+
+from core.timer import elapsed, now
+from providers.base import SandboxProvider
 
 
-def build_scenario() -> BenchmarkScenario:
-    def run(provider) -> BenchmarkReport:
-        duration, _ = time_call(provider.destroy)
-        return BenchmarkReport(
-            benchmark="destroy",
-            provider=provider.name,
-            samples=[MetricSample(name="destroy", value=duration)],
-        )
+class BenchmarkResult(TypedDict):
+    latency: float
+    metadata: dict[str, Any]
 
-    return BenchmarkScenario(
-        name="destroy",
-        description="Measure teardown latency for the environment.",
-        run=run,
-    )
+
+class Benchmark:
+    name = "destroy"
+
+    async def run(self, provider: SandboxProvider) -> BenchmarkResult:
+        sandbox = await provider.create()
+        start = now()
+        await sandbox.destroy()
+        latency = elapsed(start)
+        return {"latency": latency, "metadata": {}}

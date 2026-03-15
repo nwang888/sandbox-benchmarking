@@ -1,33 +1,44 @@
-"""Filesystem benchmark scaffold."""
+"""Filesystem roundtrip latency benchmark."""
 
-from core.metrics import BenchmarkReport, MetricSample
-from core.scenario import BenchmarkScenario
-from core.timer import time_call
+from __future__ import annotations
+
+from typing import Any, TypedDict
+
+from core.timer import elapsed, now
+from providers.base import SandboxProvider
 
 
-def build_scenario() -> BenchmarkScenario:
-    def run(provider) -> BenchmarkReport:
-        write_duration, _ = time_call(
-            provider.write_file,
-            "/tmp/benchmark.txt",
-            "benchmark",
-        )
-        read_duration, content = time_call(provider.read_file, "/tmp/benchmark.txt")
-        return BenchmarkReport(
-            benchmark="filesystem",
-            provider=provider.name,
-            samples=[
-                MetricSample(name="write_file", value=write_duration),
-                MetricSample(
-                    name="read_file",
-                    value=read_duration,
-                    metadata={"bytes": len(content)},
-                ),
-            ],
-        )
+class BenchmarkResult(TypedDict):
+    latency: float
+    metadata: dict[str, Any]
 
-    return BenchmarkScenario(
-        name="filesystem",
-        description="Measure simple file write and read latency.",
-        run=run,
-    )
+
+class Benchmark:
+    name = "filesystem"
+
+    async def run(self, provider: SandboxProvider) -> BenchmarkResult:
+        sandbox = await provider.create()
+        path = "/tmp/benchmark_roundtrip.txt"
+        payload = "benchmark-roundtrip-content"
+
+        try:
+            write_start = now()
+            await sandbox.write_file(path, payload)
+            write_latency = elapsed(write_start)
+
+            read_start = now()
+            content = await sandbox.read_file(path)
+            read_latency = elapsed(read_start)
+        finally:
+            await sandbox.destroy()
+
+        roundtrip_latency = write_latency + read_latency
+        return {
+            "latency": roundtrip_latency,
+            "metadata": {
+                "write_latency": write_latency,
+                "read_latency": read_latency,
+                "bytes": len(content),
+                "content_matches": content == payload,
+            },
+        }

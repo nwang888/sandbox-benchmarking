@@ -1,21 +1,24 @@
-"""Cold-start benchmark scaffold."""
+"""Cold start latency benchmark."""
 
-from core.metrics import BenchmarkReport, MetricSample
-from core.scenario import BenchmarkScenario
-from core.timer import time_call
+from __future__ import annotations
+
+from typing import Any, TypedDict
+
+from core.timer import elapsed, now
+from providers.base import SandboxProvider
 
 
-def build_scenario() -> BenchmarkScenario:
-    def run(provider) -> BenchmarkReport:
-        duration, _ = time_call(provider.start)
-        return BenchmarkReport(
-            benchmark="cold_start",
-            provider=provider.name,
-            samples=[MetricSample(name="cold_start", value=duration)],
-        )
+class BenchmarkResult(TypedDict):
+    latency: float
+    metadata: dict[str, Any]
 
-    return BenchmarkScenario(
-        name="cold_start",
-        description="Measure time to start a fresh environment.",
-        run=run,
-    )
+
+class Benchmark:
+    name = "cold_start"
+
+    async def run(self, provider: SandboxProvider) -> BenchmarkResult:
+        start = now()
+        sandbox = await provider.create()
+        latency = elapsed(start)
+        await sandbox.destroy()
+        return {"latency": latency, "metadata": {}}

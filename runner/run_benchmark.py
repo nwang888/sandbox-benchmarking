@@ -1,64 +1,159 @@
-"""CLI entry point for the benchmark scaffold."""
+"""CLI entry point for running sandbox benchmarks."""
 
 from __future__ import annotations
 
 import argparse
+import asyncio
 import importlib
 import json
+import os
+import platform
+import pkgutil
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
+# Support invocation as `python runner/run_benchmark.py`.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-PROVIDERS = {
-    "docker_local": ("providers.docker_local", "DockerLocalProvider"),
-    "e2b": ("providers.e2b", "E2BProvider"),
-    "daytona": ("providers.daytona", "DaytonaProvider"),
-}
+import benchmarks
+from core.metrics import summarize
+from providers.registry import PROVIDER_REGISTRY, create_provider
 
-BENCHMARKS = {
-    "cold_start": "benchmarks.cold_start",
-    "exec": "benchmarks.exec",
-    "stream": "benchmarks.stream",
-    "filesystem": "benchmarks.filesystem",
-    "destroy": "benchmarks.destroy",
-}
-
-
-def load_provider(name: str):
-    module_name, class_name = PROVIDERS[name]
-    module = importlib.import_module(module_name)
-    return getattr(module, class_name)()
-
-
-def load_scenario(name: str):
-    module = importlib.import_module(BENCHMARKS[name])
-    return module.build_scenario()
+REQUIRED_BENCHMARKS = (
+    "cold_start",
+    "exec",
+    "stream",
+    "filesystem",
+    "command_loop",
+    "destroy",
+)
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run a benchmark scaffold.")
-    parser.add_argument("provider", choices=sorted(PROVIDERS))
-    parser.add_argument("benchmark", choices=sorted(BENCHMARKS))
-    parser.add_argument(
-        "--output",
-        default="results/raw/latest.json",
-        help="Path for the JSON benchmark report.",
-    )
+    parser = argparse.ArgumentParser(description="Run sandbox benchmarks.")
+    parser.add_argument("--provider", required=True, choices=sorted(PROVIDER_REGISTRY))
+    parser.add_argument("--runs", type=int, default=30)
     return parser.parse_args()
+
+
+def detect_region() -> str:
+    for key in (
+        "SANDBOX_BENCH_REGION",
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
+        "GCP_REGION",
+        "AZURE_REGION",
+    ):
+        value = os.getenv(key)
+        if value:
+            return value
+    return "unknown"
+
+
+def discover_benchmarks() -> list[Any]:
+    package_dir = Path(benchmarks.__file__).resolve().parent
+    discovered: dict[str, Any] = {}
+
+    for module_info in pkgutil.iter_modules([str(package_dir)]):
+        if module_info.name.startswith("_"):
+            continue
+        module = importlib.import_module(f"benchmarks.{module_info.name}")
+        benchmark_cls = getattr(module, "Benchmark", None)
+        if benchmark_cls is None:
+            continue
+        benchmark = benchmark_cls()
+        discovered[benchmark.name] = benchmark
+
+    missing = [name for name in REQUIRED_BENCHMARKS if name not in discovered]
+    if missing:
+        raise RuntimeError(f"Missing required benchmark modules: {', '.join(missing)}")
+
+    return [discovered[name] for name in REQUIRED_BENCHMARKS]
+
+
+def ensure_output_dirs() -> tuple[Path, Path]:
+    raw_dir = Path("results/raw")
+    summary_dir = Path("results/summaries")
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    summary_dir.mkdir(parents=True, exist_ok=True)
+    return raw_dir, summary_dir
+
+
+def build_common_metadata(provider_name: str, provider_version: str, runs: int) -> dict[str, Any]:
+    return {
+        "provider": provider_name,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "python_version": platform.python_version(),
+        "machine_type": platform.machine() or "unknown",
+        "region": detect_region(),
+        "provider_version": provider_version,
+        "number_of_runs": runs,
+    }
+
+
+async def run_benchmark(provider: Any, benchmark: Any, runs: int) -> tuple[list[float], list[dict[str, Any]]]:
+    latencies: list[float] = []
+    run_metadata: list[dict[str, Any]] = []
+
+    for run_index in range(1, runs + 1):
+        result = await benchmark.run(provider)
+        latencies.append(float(result["latency"]))
+        metadata = dict(result["metadata"])
+        metadata["run_index"] = run_index
+        metadata["timestamp"] = datetime.now(timezone.utc).isoformat()
+        run_metadata.append(metadata)
+
+    return latencies, run_metadata
+
+
+async def main_async(args: argparse.Namespace) -> int:
+    if args.runs < 1:
+        raise ValueError("--runs must be >= 1")
+
+    provider = create_provider(args.provider)
+    benchmark_instances = discover_benchmarks()
+    raw_dir, summary_dir = ensure_output_dirs()
+
+    for benchmark in benchmark_instances:
+        latencies, run_metadata = await run_benchmark(provider, benchmark, args.runs)
+        summary = summarize(latencies)
+
+        provider_version = str(getattr(provider, "version", "unknown"))
+        common_metadata = build_common_metadata(provider.name, provider_version, args.runs)
+        benchmark_name = benchmark.name
+
+        raw_payload: dict[str, Any] = {
+            **common_metadata,
+            "benchmark": benchmark_name,
+            "runs": latencies,
+            "run_metadata": run_metadata,
+        }
+        summary_payload: dict[str, Any] = {
+            **common_metadata,
+            "benchmark": benchmark_name,
+            **summary,
+        }
+
+        raw_path = raw_dir / f"{provider.name}_{benchmark_name}.json"
+        summary_path = summary_dir / f"{provider.name}_{benchmark_name}.json"
+        raw_path.write_text(json.dumps(raw_payload, indent=2) + "\n", encoding="utf-8")
+        summary_path.write_text(json.dumps(summary_payload, indent=2) + "\n", encoding="utf-8")
+        print(f"{provider.name}/{benchmark_name}: mean={summary['mean']:.6f}s")
+
+    return 0
 
 
 def main() -> int:
     args = parse_args()
-    provider = load_provider(args.provider)
-    scenario = load_scenario(args.benchmark)
-    provider.setup()
-    report = scenario.run(provider)
-
-    output_path = Path(args.output)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(report.as_dict(), indent=2) + "\n")
-
-    print(json.dumps(report.as_dict(), indent=2))
-    return 0
+    try:
+        return asyncio.run(main_async(args))
+    except Exception as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
