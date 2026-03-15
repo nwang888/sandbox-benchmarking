@@ -11,7 +11,7 @@ Reproducible Python benchmark framework for sandbox providers used for code exec
 ## Implemented Providers
 
 - `docker`: baseline implementation using Docker CLI (`docker run`, `docker exec`, `docker cp`, `docker rm -f`)
-- `e2b`: placeholder stub
+- `e2b`: AsyncSandbox-based implementation (`create`, `exec`, `stream_exec`, file read/write, `destroy`)
 - `daytona`: AsyncDaytona-based implementation (`create`, `exec`, `stream_exec`, file read/write, `destroy`)
 
 ## Benchmarks
@@ -43,6 +43,14 @@ For Daytona:
 export DAYTONA_API_KEY=...
 # optional: DAYTONA_API_URL, DAYTONA_TARGET
 uv run python runner/run_benchmark.py --provider daytona --runs 5
+```
+
+For E2B:
+
+```bash
+export E2B_API_KEY=...
+# optional: SANDBOX_BENCH_E2B_TEMPLATE, SANDBOX_BENCH_E2B_TIMEOUT
+uv run python runner/run_benchmark.py --provider e2b --runs 5
 ```
 
 Raw and summary output files are written as:
