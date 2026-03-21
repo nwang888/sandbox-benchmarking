@@ -6,7 +6,7 @@ Reproducible Python benchmark framework for sandbox providers used for code exec
 
 - Python 3.11
 - Docker CLI available on `PATH` (for `docker` provider)
-- Daytona API credentials (for `daytona` provider)
+- Provider credentials via environment variables or `.env` file
 
 ## Implemented Providers
 
@@ -37,6 +37,13 @@ If dependencies are managed with `uv`, run through the project environment:
 uv run python runner/run_benchmark.py --provider docker --runs 30
 ```
 
+The runner loads `.env` by default. You can override or disable this:
+
+```bash
+uv run python runner/run_benchmark.py --provider e2b --runs 5 --env-file .env
+uv run python runner/run_benchmark.py --provider e2b --runs 5 --no-env-file
+```
+
 For Daytona:
 
 ```bash
@@ -52,6 +59,12 @@ export E2B_API_KEY=...
 # optional: SANDBOX_BENCH_E2B_TEMPLATE, SANDBOX_BENCH_E2B_TIMEOUT
 uv run python runner/run_benchmark.py --provider e2b --runs 5
 ```
+
+## Credential Handling
+
+- Credentials are loaded once in the runner, then validated per provider before execution.
+- Secret values are read through one central helper so this can be swapped to a secret manager later.
+- `.env` should remain local-only and uncommitted.
 
 Raw and summary output files are written as:
 

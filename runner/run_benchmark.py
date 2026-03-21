@@ -20,6 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import benchmarks
+from core.config import load_env_file, validate_provider_secrets
 from core.metrics import summarize
 from providers.registry import PROVIDER_REGISTRY, create_provider
 
@@ -37,6 +38,16 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run sandbox benchmarks.")
     parser.add_argument("--provider", required=True, choices=sorted(PROVIDER_REGISTRY))
     parser.add_argument("--runs", type=int, default=30)
+    parser.add_argument(
+        "--env-file",
+        default=".env",
+        help="Path to dotenv file used for credentials (default: .env).",
+    )
+    parser.add_argument(
+        "--no-env-file",
+        action="store_true",
+        help="Disable dotenv loading and rely only on existing process environment variables.",
+    )
     return parser.parse_args()
 
 
@@ -113,6 +124,10 @@ async def run_benchmark(provider: Any, benchmark: Any, runs: int) -> tuple[list[
 async def main_async(args: argparse.Namespace) -> int:
     if args.runs < 1:
         raise ValueError("--runs must be >= 1")
+
+    if not args.no_env_file:
+        load_env_file(args.env_file, strict=args.env_file != ".env")
+    validate_provider_secrets(args.provider)
 
     provider = create_provider(args.provider)
     benchmark_instances = discover_benchmarks()
