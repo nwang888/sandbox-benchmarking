@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Awaitable, Callable
 
-from core.metrics import BenchmarkReport
-from providers.base import Provider
+from providers.base import SandboxProvider
 
 
 @dataclass(slots=True)
 class BenchmarkScenario:
     name: str
     description: str
-    run: Callable[[Provider], BenchmarkReport]
+    run: Callable[[SandboxProvider], Awaitable[dict[str, Any]]]

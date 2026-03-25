@@ -8,3 +8,5 @@ results/raw/*
 !results/raw/.gitkeep
 results/summaries/*
 !results/summaries/.gitkeep
+results/runs/*
+!results/runs/.gitkeep

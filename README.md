@@ -37,6 +37,17 @@ If dependencies are managed with `uv`, run through the project environment:
 uv run python runner/run_benchmark.py --provider docker --runs 30
 ```
 
+Additional controls:
+
+```bash
+uv run python runner/run_benchmark.py \
+  --provider docker \
+  --runs 30 \
+  --warmup-trials 5 \
+  --timeout-seconds 120 \
+  --slo-latency-ms 2000
+```
+
 The runner loads `.env` by default. You can override or disable this:
 
 ```bash
@@ -70,6 +81,8 @@ Raw and summary output files are written as:
 
 - `results/raw/{provider}_{benchmark}.json`
 - `results/summaries/{provider}_{benchmark}.json`
+- `results/runs/<timestamp>_<provider>/metadata.json`
+- `results/runs/<timestamp>_<provider>/results.jsonl`
 
 ## Inspect Results
 
@@ -88,3 +101,17 @@ Each benchmark result captures:
 - region (from env if available, otherwise `unknown`)
 - provider version
 - number of runs
+
+Each JSONL trial record captures:
+
+- trial index and warmup flag
+- success/failure + error/timeout info
+- latency (`latency_s`, `latency_ms`)
+- benchmark-specific metadata for that trial
+
+Summary files now include reliability metrics:
+
+- `failure_rate`
+- `timeout_rate`
+- `slo_violation_rate`
+- `tail_ratio`

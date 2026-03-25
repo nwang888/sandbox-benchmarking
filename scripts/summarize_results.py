@@ -9,6 +9,24 @@ from pathlib import Path
 SUMMARY_DIR = Path("results/summaries")
 
 
+def format_seconds(value: object) -> str:
+    if isinstance(value, (float, int)):
+        return f"{float(value):.6f}s"
+    return "n/a"
+
+
+def format_ratio(value: object) -> str:
+    if isinstance(value, (float, int)):
+        return f"{float(value):.2%}"
+    return "n/a"
+
+
+def format_scalar(value: object) -> str:
+    if isinstance(value, (float, int)):
+        return f"{float(value):.3f}"
+    return "n/a"
+
+
 def main() -> int:
     files = sorted(SUMMARY_DIR.glob("*.json"))
     if not files:
@@ -19,11 +37,14 @@ def main() -> int:
         payload = json.loads(path.read_text(encoding="utf-8"))
         print(
             f"{payload['provider']}/{payload['benchmark']}: "
-            f"mean={payload['mean']:.6f}s "
-            f"median={payload['median']:.6f}s "
-            f"p95={payload['p95']:.6f}s "
-            f"p99={payload['p99']:.6f}s "
-            f"stddev={payload['stddev']:.6f}s"
+            f"mean={format_seconds(payload.get('mean'))} "
+            f"p50={format_seconds(payload.get('p50', payload.get('median')))} "
+            f"p95={format_seconds(payload.get('p95'))} "
+            f"p99={format_seconds(payload.get('p99'))} "
+            f"tail_ratio={format_scalar(payload.get('tail_ratio'))} "
+            f"failure_rate={format_ratio(payload.get('failure_rate'))} "
+            f"timeout_rate={format_ratio(payload.get('timeout_rate'))} "
+            f"slo_violation_rate={format_ratio(payload.get('slo_violation_rate'))}"
         )
 
     return 0

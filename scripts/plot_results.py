@@ -19,7 +19,14 @@ def main() -> int:
     for path in files:
         payload = json.loads(path.read_text(encoding="utf-8"))
         label = f"{payload['provider']}/{payload['benchmark']}"
-        rows.append((label, float(payload["mean"])))
+        mean = payload.get("mean")
+        if not isinstance(mean, (float, int)):
+            continue
+        rows.append((label, float(mean)))
+
+    if not rows:
+        print("No plottable mean values found in summary files.")
+        return 0
 
     max_latency = max(value for _, value in rows) or 1.0
     for label, value in sorted(rows, key=lambda item: item[1]):
