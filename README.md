@@ -91,6 +91,49 @@ python3.11 scripts/summarize_results.py
 python3.11 scripts/plot_results.py
 ```
 
+## Automated Tests
+
+Install dev test dependencies:
+
+```bash
+uv sync --group dev
+```
+
+Run deterministic contract tests (no live provider required):
+
+```bash
+uv run pytest -m "not live"
+# or:
+./scripts/test_unit.sh
+```
+
+Run live provider smoke tests (hits real services):
+
+```bash
+RUN_LIVE_BENCHMARK_TESTS=1 \
+LIVE_PROVIDERS=docker \
+LIVE_RUNS=1 \
+LIVE_WARMUP_TRIALS=0 \
+LIVE_TIMEOUT_SECONDS=120 \
+LIVE_MAX_FAILURE_RATE=0.05 \
+LIVE_MAX_TIMEOUT_RATE=0.05 \
+uv run pytest -m live
+# or:
+./scripts/test_live.sh
+```
+
+Recommended local setup:
+
+- Put provider credentials and optional live-test vars in `.env`.
+- `scripts/test_live.sh` auto-loads `.env` if present.
+- Keep live smoke tests small (`LIVE_RUNS=1`) and run them manually or on schedule.
+
+CI defaults:
+
+- `Unit Tests` workflow runs on every PR and on pushes to `main`.
+- `Live Smoke Tests` workflow runs nightly and on manual dispatch.
+- Live workflow reads provider credentials from repository secrets and optional thresholds from repository variables.
+
 ## Reproducibility Metadata
 
 Each benchmark result captures:

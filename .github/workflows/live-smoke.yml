@@ -1,0 +1,39 @@
+name: Live Smoke Tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 9 * * *"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      RUN_LIVE_BENCHMARK_TESTS: "1"
+      LIVE_PROVIDERS: ${{ vars.LIVE_PROVIDERS }}
+      LIVE_RUNS: ${{ vars.LIVE_RUNS }}
+      LIVE_WARMUP_TRIALS: ${{ vars.LIVE_WARMUP_TRIALS }}
+      LIVE_TIMEOUT_SECONDS: ${{ vars.LIVE_TIMEOUT_SECONDS }}
+      LIVE_SLO_LATENCY_MS: ${{ vars.LIVE_SLO_LATENCY_MS }}
+      LIVE_MAX_FAILURE_RATE: ${{ vars.LIVE_MAX_FAILURE_RATE }}
+      LIVE_MAX_TIMEOUT_RATE: ${{ vars.LIVE_MAX_TIMEOUT_RATE }}
+      E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
+      DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+      DAYTONA_JWT_TOKEN: ${{ secrets.DAYTONA_JWT_TOKEN }}
+      DAYTONA_ORGANIZATION_ID: ${{ secrets.DAYTONA_ORGANIZATION_ID }}
+      DAYTONA_API_URL: ${{ secrets.DAYTONA_API_URL }}
+      DAYTONA_TARGET: ${{ secrets.DAYTONA_TARGET }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Run live smoke tests
+        run: ./scripts/test_live.sh
